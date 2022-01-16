@@ -43,3 +43,4 @@
 2022-01-16 22:37:01,477 agent:1 ,co_actions:[{'add': []}, {'subtract': []}, {'multiply': []}, {'divide': []}, {'diff': [[0, 21]]}, {'value_convert': {}}, {'delete': {}}]
 2022-01-16 22:37:09,842 agent:2 ,co_actions:[{'add': [[0, 11]]}, {'subtract': []}, {'multiply': []}, {'divide': []}, {'diff': []}, {'value_convert': {}}, {'delete': {}}]
 2022-01-16 22:37:36,869 agent:3 ,co_actions:[{'add': []}, {'subtract': []}, {'multiply': []}, {'divide': []}, {'diff': [[0, 19]]}, {'value_convert': {}}, {'delete': {}}]
+2022-01-16 22:38:25,828 epoch:12 ,target_actions:[{'add': []}, {'subtract': []}, {'multiply': []}, {'divide': []}, {'diff': [[0, 19]]}, {'value_convert': {}}, {'delete': {}}]
