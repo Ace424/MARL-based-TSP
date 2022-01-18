@@ -2,8 +2,27 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import numpy as np
+import random
+from collections import deque
+
 
 # 封装一些网络/RL底层的组件
+class ReplayBuffer(object):
+    def __init__(self, capacity):
+        self.buffer = deque(maxlen=capacity)
+
+    def push(self, state, action, reward, next_state, done):
+        state = np.expand_dims(state, 0)
+        next_state = np.expand_dims(next_state, 0)
+        self.buffer.append((state, action, reward, next_state, done))
+
+    def sample(self, batch_size):
+        state, action, reward, next_state, done = zip(*random.sample(self.buffer, batch_size))
+        return np.concatenate(state), action, reward, np.concatenate(next_state), done
+
+    def __len__(self):
+        return len(self.buffer)
+
 
 class Linear(nn.Module):
     def __init__(self, in_features, out_features, bias=True):

@@ -246,7 +246,7 @@ def diff(col1, col2, delta):
     try:
         col1 = np.array(col1)
         col2 = np.array(col2)
-        return (col1 - col2) / delta.reshape(-1, 1)
+        return ((col1 - col2) / delta).reshape(-1, 1)
     except:
         raise ValueError('Value type error,check feature type')
 

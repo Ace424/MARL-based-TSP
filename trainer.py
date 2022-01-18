@@ -34,7 +34,6 @@ def getLinerFlag(dataSet, axis):
 
 def calcLinerData(dataSet):
     num = len(dataSet)
-    print("num" + str(num))
     count = {1: 0, 0: 0}
     shannonEnt = 0.0
     feature = []
@@ -86,23 +85,22 @@ def splitDataSet(dataSet, axis, value, direction):
 
 
 # trained by PPO
-def trainPPO(args, df, c_columns, d_columns, target, mode, model, metric):
-    n_features_c = len(c_columns)
-    ops = get_ops(n_features_c)
+def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
+    df_target = pd.read_csv(dataset_path + target)
+    df_covariates = [pd.read_csv(dataset_path + x) for x in covariates]
+    r, c = df_target.shape
 
-    # df.drop_duplicates(keep="first", inplace=True)
+    # 划分训练和测试集
+    X_train, Y_train, X_val, Y_val = ts_split_train_val(df_target, c)
+    n_features_c = X_train.shape[1]  # feature number
+    ops = get_ops(n_features_c)  # feature ops
 
-    # 划分训练和测试集，返回训练集
-    df_train_val = split_train_test(df, args, d_columns, target, mode)
     # 训练集五折验证作为baseline，返回均值及五折的值
-    score_b, scores_b = test_baseline_cv(df_train_val, args, mode, model, metric)
+    score_b, scores_b = test_baseline_cv(X_train, Y_train, args, mode, model, metric)
 
-    # 连续特征归一化和离散特征数值化，作为初始的state
-    df_d_labelencode, df_c_encode, df_t = features_process(df_train_val, mode, c_columns, d_columns, target)
-    x_d_onehot = label_encode_to_onehot(df_d_labelencode.values)
-
-    data_nums = df_c_encode.shape[0]
+    data_nums = df_target.shape[0]
     operations = len(ops)
+    covars = len(covariates)
     d_model = args.d_model
     d_k = args.d_k
     d_v = args.d_v
@@ -110,94 +108,125 @@ def trainPPO(args, df, c_columns, d_columns, target, mode, model, metric):
     n_heads = args.n_heads
     ppo = PPO(args, data_nums, operations, d_model, d_k, d_v, d_ff, n_heads, dropout=None)
 
-    pipline_args_train = {'dataframe': df_train_val,
-                          'continuous_columns': c_columns,
-                          'discrete_columns': d_columns,
-                          'label_name': target,
-                          'mode': mode,
-                          'isvalid': False,
-                          'memory': None}
+    pipeline_args_train = {'dataframe': df_target,
+                           'continuous_columns': X_train.columns,
+                           'discrete_columns': [],
+                           'label_name': Y_train.to_frame().columns[0],
+                           'mode': mode,
+                           'isvalid': False,
+                           'memory': None}
 
-    # 用于记录搜索过程reward top5的样本
-    workers_top5 = []
+    # 用于存储协变量序列的Agent
+    ppo_list = []
+    for agent in range(len(covariates)):
+        data_co_nums = df_covariates[agent].shape[0]
+        ppo_list.append(PPO(args, data_co_nums, operations, d_model, d_k, d_v, d_ff, n_heads, dropout=None))
+
+    workers_c = []
+    # TODO:workers_mixed
+    workers_mix = []
+    co_workers = []
+    best_worker_target = Worker(args)  # 记录最优target worker
+    best_coworkers = [Worker(args) for i in range(covars)]  # 记录最优co workers
 
     for epoch in range(args.epochs):
         queue = Queue()
-        workers_c = []
+        # sample步骤进行Action选取和State变更
+        # target序列采样
+        result_target = sample(args, ppo, pipeline_args_train, df_target, Y_train, ops, epoch)
+        workers_c.append(result_target)
 
-        for i in range(args.episodes):
-            logging.info(
-                f"------------------------worker:{i + 1}-------------------------")
-            result = sample(args, ppo, pipline_args_train, df_c_encode, df_t, ops, epoch, i)
-            workers_c.append(result)
+        # 协变量序列采样
+        for agent in range(covars):
+            df_co = df_covariates[agent]
+            c = df_co.shape[1]
+            X_train_co, Y_train_co, X_val_co, Y_val_co = ts_split_train_val(df_co, c)
+            pipeline_args_co = {'dataframe': df_co,
+                                'continuous_columns': X_train_co.columns,
+                                'discrete_columns': [],
+                                'label_name': Y_train_co.to_frame().columns[0],
+                                'mode': mode,
+                                'isvalid': False,
+                                'memory': None}
+            result_co = sample(args, ppo_list[agent], pipeline_args_co, df_co, Y_train_co, ops, epoch)
+            co_workers.append(result_co)
 
-        for eposide in range(args.episodes):
-            accs = []
-            cvs = []
-            # 计算每个step的reward，连续和离散的agent共用reward
+        # 各Agent计算reward&update
+        # target序列计算reward
+        accs = []
+        cvs = []
+        for step in range(args.steps_num):
+            ff = result_target.ff[0:step + 1]
+            x = result_target.features[step]
+            y = Y_train.values
+            acc, cv, _ = get_reward(x, y, args, scores_b, mode, model, metric)
+            accs.append(acc)
+            cvs.append(cv)
+            # 更改acc，cv赋值
+        result_target.accs = accs
+        result_target.cvs = cvs
+        # 记录最优target_worker
+        if np.mean(result_target.accs) > np.mean(best_worker_target.accs):
+            best_worker_target = result_target
+
+        new_nums = cal_feaure_nums(result_target.ff)
+        ori_nums = df_target.shape[1] - 1
+        feature_nums = ori_nums + new_nums
+        logging.info(
+            f"target ,results:{result_target.accs},cv:{result_target.cvs[-1]},feature_nums:{feature_nums / ori_nums, feature_nums, ori_nums},ff:{result_target.ff}")
+
+        # 协变量序列计算reward
+        for agent in range(covars):
+            accs_co = []
+            cvs_co = []
+            df_co = df_covariates[agent]
+            c = df_co.shape[1]
+            X_train_co, Y_train_co, X_val_co, Y_val_co = ts_split_train_val(df_co, c)
+            score_b_co, scores_b_co = test_baseline_cv(X_train_co, Y_train_co, args, mode, model, metric)
+            # 计算每个step的reward以及accuracy
             for step in range(args.steps_num):
-                ff = workers_c[eposide].ff[0:step + 1]
-                if len(d_columns):
-                    x = np.concatenate((workers_c[eposide].features[step], x_d_onehot), axis=1)
-                else:
-                    x = workers_c[eposide].features[step]
-                y = df_t.values
-                acc, cv, _ = get_reward(x, y, args, scores_b, mode, model, metric)
+                ff = co_workers[agent].ff[0:step + 1]
+                x = co_workers[agent].features[step]
+                y = Y_train_co.values
+                acc, cv, _ = get_reward(x, y, args, scores_b_co, mode, model, metric)
+                accs_co.append(acc)
+                cvs_co.append(cv)
+            # 更改acc，cv赋值
+            co_workers[agent].accs = accs_co
+            co_workers[agent].cvs = cvs_co
+            # 记录最优co-worker
+            if np.mean(accs_co) > np.mean(best_coworkers[agent].accs):
+                best_coworkers[agent] = co_workers[agent]
 
-                accs.append(acc)
-                cvs.append(cv)
-
-                # 记录20个epoch后的样本（后续只取reward前5的样本），只记录最后一个step的reward
-
-                worker = Worker(args)
-                worker.accs = acc
-                worker.cvs = cv
-                worker.ff = ff
-                workers_top5.append(worker)
-
-            workers_c[eposide].accs = accs
-            workers_c[eposide].cvs = cvs
-
-            # logging.info(f"worker{eposide + 1} ,results:{accs},cv:{cvs[-1]},ff:{workers_c[eposide].ff}")
-
-            new_nums = cal_feaure_nums(workers_c[eposide].ff)
-            ori_nums = df_c_encode.shape[1] - 1
+            new_nums = cal_feaure_nums(co_workers[agent].ff)
+            ori_nums = df_co.shape[1] - 1
             feature_nums = ori_nums + new_nums
             logging.info(
-                f"worker{eposide + 1} ,results:{workers_c[eposide].accs},cv:{workers_c[eposide].cvs[-1]},feature_nums:{feature_nums / ori_nums, feature_nums, ori_nums},ff:{workers_c[eposide].ff}")
-        # 计算每个epoch reward的均值
-        baseline = np.mean([worker.accs for worker in workers_c], axis=0)
+                f"agent{agent + 1} ,results:{co_workers[agent].accs},cv:{co_workers[agent].cvs[-1]},feature_nums:{feature_nums / ori_nums, feature_nums, ori_nums},ff:{co_workers[agent].ff}")
+
+        # list各epoch's target worker的准确率
+        baseline = [worker.accs for worker in workers_c]
         logging.info(f"epoch:{epoch},baseline:{baseline},score_b:{score_b},scores_b:{scores_b}")
 
-        # 记录搜索过程中top5的动作
-        workers_top5.sort(key=lambda worker: worker.accs, reverse=True)
-        workers_top5 = workers_top5[0:5]
+        # list当前最优target worker的信息
         try:
-            for i in range(5):
-                new_nums = cal_feaure_nums(workers_top5[i].ff)
-                ori_nums = df_c_encode.shape[1] - 1
-                feature_nums = ori_nums + new_nums
-                logging.info(
-                    f"top_{i + 1}:{workers_top5[i].accs},feature_nums:{feature_nums / ori_nums, feature_nums, ori_nums},{workers_top5[i].ff}")
+            new_nums = cal_feaure_nums(best_worker_target.ff)
+            ori_nums = df_target.shape[1] - 1
+            feature_nums = ori_nums + new_nums
+            logging.info(
+                f"top_target_acc:{best_worker_target.accs},feature_nums:{feature_nums / ori_nums, feature_nums, ori_nums},{best_worker_target.ff}")
         except:
             pass
 
-        """早停：最后一个step中10个样本中有6个reward相同或者到99轮时停止训练；并将初始的state传入agent中推理得到动作"""
-        # reward = [worker.accs[-1] for worker in workers_c]
-        # maxlabel = max(reward, key=reward.count)
-        # nums = reward.count(maxlabel)
-        # index = reward.index(maxlabel)
-        # if nums >= 6 or epoch == 99:
-        #     ppo.save_model_c()
-        #     operations = workers_c[index].operations
-        #     logging.info(f",acc:{workers_c[index].accs[-1]},infer actions:{operations}")
-        #     exit()
-
-        ppo.update_c(workers_c)
+        # ppo更新网络
+        ppo.update_c([result_target])
+        for agent in range(covars):
+            result_co = co_workers[agent]
+            ppo_list[agent].update_c([result_co])
 
 
-def sample(args, ppo, pipline_args_train, df_c_encode, df_t, ops, epoch, i):
-    # 记录采样过程中动作，概率，state，特征等
+def sample(args, ppo, pipline_args_train, df_c_encode, df_t, ops, epoch):
+    # 记录采样过程中动作，概率，state，特征等，返回一个worker
     pipline_ff_c = Pipline(pipline_args_train)
     worker_c = Worker(args)
     states_c = []
@@ -206,54 +235,29 @@ def sample(args, ppo, pipline_args_train, df_c_encode, df_t, ops, epoch, i):
     steps = []
     features_c = []
 
-    # 连续和离散特征初始的state"
+    # 连续和离散特征初始的state
     n_features = df_c_encode.shape[1] - 1
-    print("------base entropy------")
+    # print("------base entropy------")
     base_entropy = calcShannonEnt(df_c_encode)
-    print(base_entropy)
+    # print(base_entropy)
     init_state_c = torch.from_numpy(df_c_encode.values).float().transpose(0, 1)
     init_feature = df_c_encode.values
 
     # 连续特征和离散特征的处理步骤
     steps_num = args.steps_num
-    if i < args.episodes // 2:
-        sample_rule = True
-    else:
-        sample_rule = False
+    # if i < args.episodes // 2:
+    sample_rule = True
+    # else:
+    #     sample_rule = False
 
     ff = []
-    feature_list = []
     for step_c in range(steps_num):
         """连续采样"""
         state_c = init_state_c
         new_feature = init_feature
 
-        for i in range(new_feature.shape[1] - 1):
-            feature_list = sorted([example[i] for example in new_feature])
-            splitList = []
-            for j in range(len(feature_list) - 1):  # 每一个划分点是相邻属性值的平均
-                splitList.append((feature_list[j] + feature_list[j + 1]) / 2.0)
-
-            # 求用第j个候选划分点划分时，得到的信息熵，并记录最佳划分点->用中位数了
-            value = splitList[int(len(splitList) / 2)]  # 划分点的值value <=value,>value
-            subDataSet0 = splitDataSet(new_feature, i, value, 0)  # 划分数据集  >value
-            subDataSet1 = splitDataSet(new_feature, i, value, 1)  # <=value
-
-            prob0 = len(subDataSet0) / float(len(new_feature))  # >value的比例
-            prob1 = len(subDataSet1) / float(len(new_feature))
-            newEntropy = prob0 * calcShannonEnt(subDataSet0) + prob1 * calcShannonEnt(subDataSet1)  # P75(4.2)的减数
-            infoGain = base_entropy - newEntropy  # 当前连续型特征最优划分点的信息增益
-            logging.info(
-                f"feature_col:{i} ,entropy:{newEntropy},infoGain:{infoGain},mean:{state_c[i].mean()}")
-            # 计算每个epoch reward的均值
-        # print("-----the number:" + str(i) + "feature-----")
-        # print("entropy:"+str(newEntropy))
-        # print("infogain:" + str(infoGain))
-        # print("mean:" + str(init_state_c[i].mean()))
-
         actions, log_probs = ppo.choose_action_c(state_c, step_c, epoch, ops, sample_rule)
         ff_c = parse_actions(actions, ops, n_features)
-
         ff.append(ff_c)
         steps.append(step_c)
         # 根据每列特征的操作生成新的特征，更新state
@@ -286,7 +290,6 @@ def sample(args, ppo, pipline_args_train, df_c_encode, df_t, ops, epoch, i):
     worker_c.dones = dones
     worker_c.features = features_c
     worker_c.ff = ff
-
     # queue.put(worker_c)
     return worker_c
 
@@ -332,11 +335,14 @@ def trainDQN(args, dataset_path, target, covariates, mode, model, metric):
     N_ACTIONS = len(ops)
     N_STATES = len(X_train)
 
+    print("N_ACTIONS:" + str(N_ACTIONS))
+
     np.random.seed(0)
     dqn = DQN(N_STATES=N_STATES, N_ACTIONS=N_ACTIONS)
 
     d_target = X_train.values  # dataset of target
     s_target = Feature_GCN(X_train)
+    # s_target = torch.from_numpy(X_train.values).float().transpose(0, 1)
     d_covariates = []  # datasets of covariates
     s_covariates = []
 
@@ -347,6 +353,7 @@ def trainDQN(args, dataset_path, target, covariates, mode, model, metric):
         dqn_list.append(DQN(N_STATES=N_STATES, N_ACTIONS=N_ACTIONS))
         d_covariates.append(df_covariates[agent].values)
         s_covariates.append(Feature_GCN(df_covariates[agent]))
+        # s_covariates.append(torch.from_numpy(df_covariates[agent].values).float().transpose(0, 1))
 
     # 记录各Agent的reward
     acc_ori = 0
@@ -384,6 +391,7 @@ def trainDQN(args, dataset_path, target, covariates, mode, model, metric):
         reward_target_vals.append(reward_target_val)
 
         s_target_next = Feature_GCN(pd.DataFrame(d_target_next))
+        # s_target_next = torch.from_numpy(d_target_next).float().transpose(0, 1)
         dqn.store_transition(s_target, target_action, reward_target_pro, s_target_next)
         # s_target = s_target_next
         acc_co_oris = []
@@ -404,6 +412,7 @@ def trainDQN(args, dataset_path, target, covariates, mode, model, metric):
             reward_co_vals[agent].append(reward_co_val)
 
             s_covar_next = Feature_GCN(pd.DataFrame(d_co_next))
+            # s_covar_next = torch.from_numpy(d_co_next).float().transpose(0, 1)
             dqn.store_transition(s_covariates[agent], action_list[agent], reward_co_pro, s_covar_next)
             # s_covariates[agent] = s_covar_next
 
@@ -436,5 +445,5 @@ def trainDQN(args, dataset_path, target, covariates, mode, model, metric):
         plt.plot(range(args.epochs), reward_co_pros[agent], label='covar_' + str(agent + 1) + '_acc_pro')
         plt.plot(range(args.epochs), reward_co_vals[agent], label='covar_' + str(agent + 1) + '_acc_val')
     plt.legend()
-    plt.savefig('test_mse.png')
+    plt.savefig('test_deep_layer.png')
     plt.show()

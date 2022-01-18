@@ -25,34 +25,36 @@ from utils import remove_duplication, rae
 import latexify
 
 
-def test_baseline_cv(df: pd.DataFrame, args, mode, model, metric):
-    c_columns = configs[args.file_name]["c_columns"]
-    d_columns = configs[args.file_name]["d_columns"]
+def test_baseline_cv(df: pd.DataFrame, y, args, mode, model, metric):
+    # c_columns = configs[args.file_name]["c_columns"]
+    # d_columns = configs[args.file_name]["d_columns"]
 
-    df_process_c = pd.DataFrame()
-    df_process_d = pd.DataFrame()
-    df_t = pd.DataFrame()
+    # df_process_c = pd.DataFrame()
+    # df_process_d = pd.DataFrame()
+    # df_t = pd.DataFrame()
 
     model = eval(f"{model}_{mode}")()
 
     # 连续特征做归一化，离散特征数值化
-    for column in df.columns.values:
-        if column in c_columns:
-            df_process_c[column] = (df[column].values - df[column].values.mean()) / (df[column].values.std())
-        elif column in d_columns:
-            df_process_d[column] = utils_memory.categories_to_int(df[column].values)
-        else:
-            if mode == "classify":
-                df_t[column] = utils_memory.categories_to_int(df[column].values)
-            else:
-                df_t[column] = df[column].values
+    # for column in df.columns.values:
+    #     if column in c_columns:
+    #         df_process_c[column] = (df[column].values - df[column].values.mean()) / (df[column].values.std())
+    #     elif column in d_columns:
+    #         df_process_d[column] = utils_memory.categories_to_int(df[column].values)
+    #     else:
+    #         if mode == "classify":
+    #             df_t[column] = utils_memory.categories_to_int(df[column].values)
+    #         else:
+    #             df_t[column] = df[column].values
 
-    x_d = label_encode_to_onehot(df_process_d.values)
-    if isinstance(x_d, np.ndarray):
-        x_train = np.concatenate((df_process_c.values, x_d), axis=1)
-    else:
-        x_train = df_process_c.values
-    y_train = df_t.values.ravel()
+    # x_d = label_encode_to_onehot(df_process_d.values)
+    # if isinstance(x_d, np.ndarray):
+    #     x_train = np.concatenate((df_process_c.values, x_d), axis=1)
+    # else:
+    #     x_train = df_process_c.values
+    # y_train = df_t.values.ravel()
+    x_train = df.values
+    y_train = y.values.ravel()
 
     if mode == "classify":
         my_cv = StratifiedShuffleSplit(n_splits=args.cv, train_size=args.cv_train_size, random_state=args.cv_seed)
@@ -93,4 +95,5 @@ def test_baseline_cv(df: pd.DataFrame, args, mode, model, metric):
             y_pred = model.predict(test_x)
             s = rae(test_y, y_pred)
             scores.append(round(s, 4))
+
     return np.array(scores).mean(), scores

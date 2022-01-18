@@ -1,0 +1,17 @@
+2022-01-18 19:59:20,603 total_loss:-0.030715307220816612,actor_loss:0.0,entory_loss:-0.030715307220816612
+Traceback (most recent call last):
+  File "C:/Users/db/PycharmProjects/AutoTS_MARL/main.py", line 112, in <module>
+    main(args, dataset_path, target, covariates, mode, model, metric)
+  File "C:/Users/db/PycharmProjects/AutoTS_MARL/main.py", line 35, in main
+    trainPPO(args, dataset_path, target, covariates, mode, model, metric)
+  File "C:\Users\db\PycharmProjects\AutoTS_MARL\trainer.py", line 151, in trainPPO
+    result_co = sample(args, ppo_list[agent], pipeline_args_co, df_co, Y_train_co, ops, epoch)
+  File "C:\Users\db\PycharmProjects\AutoTS_MARL\trainer.py", line 265, in sample
+    x_c_norm, x_c = pipline_ff_c.process_continuous(ff_action)
+  File "C:\Users\db\PycharmProjects\AutoTS_MARL\feature_engineering\pipline_memory_with_selector.py", line 244, in process_continuous
+    new_fes = self.arithmetic_operations(new_fes)
+  File "C:\Users\db\PycharmProjects\AutoTS_MARL\feature_engineering\pipline_memory_with_selector.py", line 144, in arithmetic_operations
+    col2 = self.ori_cols_continuous[:, col2_index]
+IndexError: index 22 is out of bounds for axis 1 with size 22
+
+Process finished with exit code 1

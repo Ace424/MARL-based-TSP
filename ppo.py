@@ -19,7 +19,7 @@ class Actor(nn.Module):
         self.encoder2 = EncoderLayer(d_model, d_k, d_v, d_ff, n_heads, dropout)
         self.select_operation = SelectOperations(d_model, operations)
 
-    def forward(self, input, step):
+    def forward(self, input):
         data_reduction_dimension = self.reduction_dimension(input)
         encoder_output1 = self.encoder1(data_reduction_dimension)
         encoder_output2 = self.encoder2(encoder_output1)
@@ -61,21 +61,11 @@ class PPO(object):
         log_probs = []
 
         self.actor_c.train()
-        action_softmax = self.actor_c(input_c, step)
-        # if sample_rule:
-        #     if epoch<=50:
-        #         ratio = 1/4
-        #     elif 50<=epoch<100:
-        #         ratio = 1/6
-        #     elif 100<=epoch<150:
-        #         ratio = 1 / 12
-        #     else:
-        #         ratio = 0
-        #     feature_nums = len(action_softmax)
-        #     none_nums = int(feature_nums*ratio)
-        #     index_none = np.random.randint(0,feature_nums,none_nums)
-        # else:
-        #     index_none = []
+        action_softmax = self.actor_c(input_c)
+        # print("------action_softmax------")
+        # print(action_softmax)
+        # print(action_softmax.shape)
+
         index_none = []
         for index, out in enumerate(action_softmax):
             dist = Categorical(out)
@@ -91,7 +81,7 @@ class PPO(object):
     def predict_action_c(self, input_c, step):
         actions = []
         # self.actor_c.eval()
-        outs = self.actor_c(input_c, step)
+        outs = self.actor_c(input_c)
         if step == "selector_c":
             for out in outs:
                 if out > 0.5:
@@ -164,7 +154,7 @@ class PPO(object):
                 for index, state in enumerate(states):
                     action = actions[index]
                     step = steps[index]
-                    action_softmax = self.actor_c(state, step)
+                    action_softmax = self.actor_c(state)
                     if index == 0:
                         softmax_output = action_softmax
                     for k, out in enumerate(action_softmax):

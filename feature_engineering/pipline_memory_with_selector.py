@@ -128,7 +128,7 @@ class Pipline(object):
     def arithmetic_operations(self, ori_fes):
         '''add/sub/multi/divide operations for continuous features'''
         operations = ['add', 'subtract', 'multiply', 'divide', 'diff']
-        feature_informations = [self.add_, self.subtract_, self.multiply_, self.divide_]
+        feature_informations = [self.add_, self.subtract_, self.multiply_, self.divide_, self.diff_]
         # print(feature_informations)
         for i, feature_information in enumerate(feature_informations):
             if len(feature_information) == 0:
@@ -138,6 +138,8 @@ class Pipline(object):
             operation = operations[i]
             for col_index_tuple in combine_feature_tuples_list:
                 col1_index, col2_index = col_index_tuple
+                # print("ori_c_cols:" + str(self.ori_cols_continuous.shape))
+                # print("col1_index:" + str(col1_index) + ", col2_index:" + str(col2_index))
                 col1 = self.ori_cols_continuous[:, col1_index]
                 col2 = self.ori_cols_continuous[:, col2_index]
                 if operation != 'None':

@@ -6,7 +6,7 @@ class Worker(object):
         self.actions = None
         self.log_probs = None
         self.values = None
-        self.accs = None
+        self.accs = 0
         self.model = None
         self.orders = None
         self.dones = None

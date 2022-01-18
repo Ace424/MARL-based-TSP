@@ -5,7 +5,7 @@ OPS = {
 }
 if __name__ == '__main__':
     ops = []
-    n_features = 6
+    n_features = 23
     arithmetic = ["add", "subtract", "multiply", "divide", "diff"]
     value_convert = ["log", "delete"]
     for i in range(1, 6):

@@ -7,6 +7,8 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 import numpy as np
 import pandas as pd
 
+from modules import *
+
 BATCH_SIZE = 32
 LR = 0.01
 EPSILON = 0.9
@@ -31,9 +33,24 @@ class Net(nn.Module):
         return action_value
 
 
+class DeepNet(nn.Module):
+
+    def __init__(self, N_STATES, N_ACTIONS, dropout=None):
+        super(DeepNet, self).__init__()
+        self.reduction_dimension = ReductionDimension(N_STATES, 64)
+        # self.encoder = EncoderLayer(64, 32, 32, 128, 6, dropout)
+        self.select_operations = SelectOperations(64, N_ACTIONS)
+
+    def forward(self, x):
+        data_reduct_dimension = self.reduction_dimension(x)
+        # encoder_output = self.encoder(data_reduct_dimension)
+        operation_softmax = self.select_operations(data_reduct_dimension)
+        return operation_softmax
+
+
 class DQN(object):
     def __init__(self, N_STATES, N_ACTIONS):
-        self.eval_net, self.target_net = Net(N_STATES, N_ACTIONS), Net(N_STATES, N_ACTIONS)
+        self.eval_net, self.target_net = DeepNet(N_STATES, N_ACTIONS), DeepNet(N_STATES, N_ACTIONS)
         self.learn_step_counter = 0
         self.memory_counter = 0
         self.memory = np.zeros((MEMORY_CAPACITY, N_STATES * 2 + 2))
@@ -44,22 +61,30 @@ class DQN(object):
         actions = []
         log_probs = []
         x = torch.unsqueeze(torch.FloatTensor(x), 0)
-        if np.random.uniform() < EPSILON:
-            action_value = self.eval_net.forward(x)
-            action_softmax = torch.softmax(action_value, dim=-1)
-            index_none = []
-            for index, out in enumerate(action_softmax):
-                dist = Categorical(out)
-                if index in index_none:
-                    action = torch.tensor(N_ACTIONS - 1)
-                else:
-                    action = dist.sample()
-                log_prob = dist.log_prob(action)
-                actions.append(int(action.item()))
-                log_probs.append(log_prob.item())
-        else:
-            action = np.random.randint(0, N_ACTIONS)
-            actions.append(action)
+        # if np.random.uniform() < EPSILON:
+        action_value = self.eval_net.forward(x)
+        action_softmax = torch.softmax(action_value, dim=-1)
+        print("------action softmax------")
+        print(action_softmax.shape)
+        index_none = []
+        for index, out in enumerate(action_softmax):
+            # print("------action_softmax------")
+            # print("index:" + str(index))
+            # print("out:" + str(out))
+            dist = Categorical(out)
+            if index in index_none:
+                action = torch.tensor(N_ACTIONS - 1)
+            else:
+                action = dist.sample()
+            log_prob = dist.log_prob(action)
+            actions.append(int(action.item()))
+            log_probs.append(log_prob.item())
+        # else:
+        #     action = np.random.randint(0, N_ACTIONS)
+        #     actions.append(action)
+
+        print("---choose anctions---")
+        print(actions)
         return actions
 
     def store_transition(self, s, a, r, s_):
