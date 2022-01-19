@@ -133,14 +133,15 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
         queue = Queue()
         # sample步骤进行Action选取和State变更
         # target序列采样
-        result_target = sample(args, ppo, pipeline_args_train, df_target, Y_train, ops, epoch)
+        result_target = sample(args, ppo, pipeline_args_train, pd.concat([X_train, Y_train.to_frame()], axis=1),
+                               Y_train, ops, epoch)
         workers_c.append(result_target)
 
         # 协变量序列采样
         for agent in range(covars):
             df_co = df_covariates[agent]
-            c = df_co.shape[1]
-            X_train_co, Y_train_co, X_val_co, Y_val_co = ts_split_train_val(df_co, c)
+            co = df_co.shape[1]
+            X_train_co, Y_train_co, X_val_co, Y_val_co = ts_split_train_val(df_co, co)
             pipeline_args_co = {'dataframe': df_co,
                                 'continuous_columns': X_train_co.columns,
                                 'discrete_columns': [],
@@ -148,7 +149,8 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
                                 'mode': mode,
                                 'isvalid': False,
                                 'memory': None}
-            result_co = sample(args, ppo_list[agent], pipeline_args_co, df_co, Y_train_co, ops, epoch)
+            result_co = sample(args, ppo_list[agent], pipeline_args_co,
+                               pd.concat([X_train_co, Y_train_co.to_frame()], axis=1), Y_train_co, ops, epoch)
             co_workers.append(result_co)
 
         # 各Agent计算reward&update
@@ -238,7 +240,7 @@ def sample(args, ppo, pipline_args_train, df_c_encode, df_t, ops, epoch):
     # 连续和离散特征初始的state
     n_features = df_c_encode.shape[1] - 1
     # print("------base entropy------")
-    base_entropy = calcShannonEnt(df_c_encode)
+    # base_entropy = calcShannonEnt(df_c_encode)
     # print(base_entropy)
     init_state_c = torch.from_numpy(df_c_encode.values).float().transpose(0, 1)
     init_feature = df_c_encode.values

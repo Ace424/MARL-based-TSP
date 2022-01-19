@@ -68,7 +68,7 @@ if __name__ == '__main__':
     parser_ppo.add_argument("--cv_train_size", type=float, default=0.7)
     parser_ppo.add_argument("--cv_seed", type=int, default=42)
     parser_ppo.add_argument("--split_train_test", type=str, default=False)
-    parser_ppo.add_argument("--mode", type=str, default=None, help="classify or regression")
+    parser_ppo.add_argument("--mode", type=str, default="regression", help="classify or regression")
     parser_ppo.add_argument("--model", type=str, default="rf", help="lr or xgb or rf")
     parser_ppo.add_argument("--metric", type=str, default="rae", help="f1,ks,auc,r2")
     parser_ppo.add_argument("--file_name", type=str, default=file_name)

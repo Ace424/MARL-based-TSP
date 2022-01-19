@@ -96,6 +96,7 @@ class Pipline(object):
                 # print(new_fe)
                 if not isinstance(new_fe, np.ndarray):
                     continue
+                # pipeline中特征更新
                 self.ori_cols_continuous = np.hstack((self.ori_cols_continuous, new_fe))
                 new_fe = new_fe.reshape(-1)
                 fe_norm = normalization(new_fe, new_fe_index, self.memory, self.isvalid)
@@ -115,6 +116,7 @@ class Pipline(object):
                     new_fe = globals()[operation](ori_col, new_fe_index, self.memory, self.isvalid)
                 else:
                     new_fe = globals()[operation](ori_col)
+                # pipeline中特征更新
                 self.ori_cols_continuous = np.hstack((self.ori_cols_continuous, new_fe))
                 new_fe = new_fe.reshape(-1)
                 if len(new_fe) > 0:
@@ -138,8 +140,14 @@ class Pipline(object):
             operation = operations[i]
             for col_index_tuple in combine_feature_tuples_list:
                 col1_index, col2_index = col_index_tuple
-                # print("ori_c_cols:" + str(self.ori_cols_continuous.shape))
-                # print("col1_index:" + str(col1_index) + ", col2_index:" + str(col2_index))
+                # debugging
+                # if col1_index == 22 or col2_index == 22:
+                #     if self.ori_cols_continuous.shape[1] == 22:
+                #         print("ori_c_cols:" + str(self.ori_cols_continuous.shape))
+                #         print(self.ori_cols_continuous)
+                #         print("col1_index:" + str(col1_index) + ", col2_index:" + str(col2_index))
+                #         print("dataframe:")
+                #         print(self.ori_dataframe)
                 col1 = self.ori_cols_continuous[:, col1_index]
                 col2 = self.ori_cols_continuous[:, col2_index]
                 if operation != 'None':
