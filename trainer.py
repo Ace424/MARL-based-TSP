@@ -124,18 +124,21 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
 
     workers_c = []
     # TODO:workers_mixed
-    workers_mix = []
     co_workers = []
     best_worker_target = Worker(args)  # 记录最优target worker
+    best_mixed_target = Worker(args)  # 记录最优mixed worker
     best_coworkers = [Worker(args) for i in range(covars)]  # 记录最优co workers
 
     for epoch in range(args.epochs):
         queue = Queue()
+        df_mixed = [[] for i in range(args.steps_num)]
+        result_mix = Worker(args)
         # sample步骤进行Action选取和State变更
         # target序列采样
         result_target = sample(args, ppo, pipeline_args_train, pd.concat([X_train, Y_train.to_frame()], axis=1),
                                Y_train, ops, epoch)
         workers_c.append(result_target)
+        # target序列use cooperative features
 
         # 协变量序列采样
         for agent in range(covars):
@@ -160,6 +163,7 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
         for step in range(args.steps_num):
             ff = result_target.ff[0:step + 1]
             x = result_target.features[step]
+            df_mixed[step] = x
             y = Y_train.values
             acc, cv, _ = get_reward(x, y, args, scores_b, mode, model, metric)
             accs.append(acc)
@@ -189,6 +193,7 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
             for step in range(args.steps_num):
                 ff = co_workers[agent].ff[0:step + 1]
                 x = co_workers[agent].features[step]
+                df_mixed[step] = np.concatenate([df_mixed[step], x], axis=1)
                 y = Y_train_co.values
                 acc, cv, _ = get_reward(x, y, args, scores_b_co, mode, model, metric)
                 accs_co.append(acc)
@@ -210,13 +215,35 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
         baseline = [worker.accs for worker in workers_c]
         logging.info(f"epoch:{epoch},baseline:{baseline},score_b:{score_b},scores_b:{scores_b}")
 
-        # list当前最优target worker的信息
+        # 计算mixed feature set的准确率
+        accs_mix = []
+        cvs_mix = []
+        for step in range(args.steps_num):
+            x = df_mixed[step]
+            y = Y_train.values
+            acc, cv, _ = get_reward(x, y, args, scores_b, mode, model, metric)
+            accs_mix.append(acc)
+            cvs_mix.append(cv)
+        result_mix.accs = accs_mix
+        result_mix.cvs = cvs_mix
+        if np.mean(result_mix.accs) > np.mean(best_mixed_target.accs):
+            best_mixed_target = result_mix
+
+        mixed_nums = df_mixed[args.steps_num - 1].shape[1]
+        ori_nums = df_target.shape[1] - 1
+        logging.info(
+            f"mixed-target ,results:{result_mix.accs},cv:{result_mix.cvs[-1]},feature_nums:{mixed_nums / ori_nums, mixed_nums, ori_nums}")
+        # list当前最优target worker, mixed worker的信息
         try:
             new_nums = cal_feaure_nums(best_worker_target.ff)
             ori_nums = df_target.shape[1] - 1
             feature_nums = ori_nums + new_nums
             logging.info(
                 f"top_target_acc:{best_worker_target.accs},feature_nums:{feature_nums / ori_nums, feature_nums, ori_nums},{best_worker_target.ff}")
+
+            mixed_nums = df_mixed[args.steps_num - 1].shape[1]
+            logging.info(
+                f"top_mixed_target_acc:{best_mixed_target.accs},cv:{best_mixed_target.cvs[-1]},feature_nums:{mixed_nums / feature_nums, mixed_nums, feature_nums}")
         except:
             pass
 
