@@ -123,7 +123,6 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
         ppo_list.append(PPO(args, data_co_nums, operations, d_model, d_k, d_v, d_ff, n_heads, dropout=None))
 
     workers_c = []
-    # TODO:workers_mixed
     co_workers = []
     best_worker_target = Worker(args)  # 记录最优target worker
     best_mixed_target = Worker(args)  # 记录最优mixed worker
@@ -145,15 +144,16 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
             df_co = df_covariates[agent]
             co = df_co.shape[1]
             X_train_co, Y_train_co, X_val_co, Y_val_co = ts_split_train_val(df_co, co)
-            pipeline_args_co = {'dataframe': df_co,
+            # try co-label == target
+            pipeline_args_co = {'dataframe': pd.concat([X_train_co, Y_train], axis=1),
                                 'continuous_columns': X_train_co.columns,
                                 'discrete_columns': [],
-                                'label_name': Y_train_co.to_frame().columns[0],
+                                'label_name': Y_train.to_frame().columns[0],
                                 'mode': mode,
                                 'isvalid': False,
                                 'memory': None}
             result_co = sample(args, ppo_list[agent], pipeline_args_co,
-                               pd.concat([X_train_co, Y_train_co.to_frame()], axis=1), Y_train_co, ops, epoch)
+                               pd.concat([X_train_co, Y_train.to_frame()], axis=1), Y_train, ops, epoch)
             co_workers.append(result_co)
 
         # 各Agent计算reward&update
@@ -232,7 +232,7 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
         mixed_nums = df_mixed[args.steps_num - 1].shape[1]
         ori_nums = df_target.shape[1] - 1
         logging.info(
-            f"mixed-target ,results:{result_mix.accs},cv:{result_mix.cvs[-1]},feature_nums:{mixed_nums / ori_nums, mixed_nums, ori_nums}")
+            f"mixed-cotarget ,results:{result_mix.accs},cv:{result_mix.cvs[-1]},feature_nums:{mixed_nums / ori_nums, mixed_nums, ori_nums}")
         # list当前最优target worker, mixed worker的信息
         try:
             new_nums = cal_feaure_nums(best_worker_target.ff)
@@ -243,7 +243,7 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
 
             mixed_nums = df_mixed[args.steps_num - 1].shape[1]
             logging.info(
-                f"top_mixed_target_acc:{best_mixed_target.accs},cv:{best_mixed_target.cvs[-1]},feature_nums:{mixed_nums / feature_nums, mixed_nums, feature_nums}")
+                f"top_mixed_cotarget_acc:{best_mixed_target.accs},cv:{best_mixed_target.cvs[-1]},feature_nums:{mixed_nums / feature_nums, mixed_nums, feature_nums}")
         except:
             pass
 
