@@ -148,12 +148,12 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
             pipeline_args_co = {'dataframe': pd.concat([X_train_co, Y_train], axis=1),
                                 'continuous_columns': X_train_co.columns,
                                 'discrete_columns': [],
-                                'label_name': Y_train.to_frame().columns[0],
+                                'label_name': Y_train_co.to_frame().columns[0],
                                 'mode': mode,
                                 'isvalid': False,
                                 'memory': None}
             result_co = sample(args, ppo_list[agent], pipeline_args_co,
-                               pd.concat([X_train_co, Y_train.to_frame()], axis=1), Y_train, ops, epoch)
+                               pd.concat([X_train_co, Y_train_co.to_frame()], axis=1), Y_train_co, ops, epoch)
             co_workers.append(result_co)
 
         # 各Agent计算reward&update
@@ -194,7 +194,7 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
                 ff = co_workers[agent].ff[0:step + 1]
                 x = co_workers[agent].features[step]
                 df_mixed[step] = np.concatenate([df_mixed[step], x], axis=1)
-                y = Y_train.values
+                y = Y_train_co.values
                 acc, cv, _ = get_reward(x, y, args, scores_b_co, mode, model, metric)
                 accs_co.append(acc)
                 cvs_co.append(cv)
