@@ -194,7 +194,7 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
                 ff = co_workers[agent].ff[0:step + 1]
                 x = co_workers[agent].features[step]
                 df_mixed[step] = np.concatenate([df_mixed[step], x], axis=1)
-                y = Y_train_co.values
+                y = Y_train.values
                 acc, cv, _ = get_reward(x, y, args, scores_b_co, mode, model, metric)
                 accs_co.append(acc)
                 cvs_co.append(cv)
