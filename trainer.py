@@ -19,6 +19,7 @@ from dqn import Net, DQN
 from model_eval import *
 from multiprocessing import Process, Queue, Manager, Pool
 from sklearn.feature_selection import VarianceThreshold
+from sklearn.ensemble import RandomForestRegressor
 
 from math import log
 
@@ -129,7 +130,6 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
     best_coworkers = [Worker(args) for i in range(covars)]  # 记录最优co workers
 
     for epoch in range(args.epochs):
-        queue = Queue()
         df_mixed = [[] for i in range(args.steps_num)]
         result_mix = Worker(args)
         # sample步骤进行Action选取和State变更
@@ -144,16 +144,16 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
             df_co = df_covariates[agent]
             co = df_co.shape[1]
             X_train_co, Y_train_co, X_val_co, Y_val_co = ts_split_train_val(df_co, co)
-            # try co-label == target
-            pipeline_args_co = {'dataframe': pd.concat([X_train_co, Y_train], axis=1),
+            # try co-label == target, return
+            pipeline_args_co = {'dataframe': pd.concat([X_train_co, Y_train_co], axis=1),
                                 'continuous_columns': X_train_co.columns,
                                 'discrete_columns': [],
-                                'label_name': Y_train.to_frame().columns[0],
+                                'label_name': Y_train_co.to_frame().columns[0],
                                 'mode': mode,
                                 'isvalid': False,
                                 'memory': None}
             result_co = sample(args, ppo_list[agent], pipeline_args_co,
-                               pd.concat([X_train_co, Y_train.to_frame()], axis=1), Y_train, ops, epoch)
+                               pd.concat([X_train_co, Y_train_co.to_frame()], axis=1), Y_train_co, ops, epoch)
             co_workers.append(result_co)
 
         # 各Agent计算reward&update
@@ -218,9 +218,10 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
         # 计算mixed feature set的准确率
         accs_mix = []
         cvs_mix = []
+
         for step in range(args.steps_num):
             x = df_mixed[step]
-            y = Y_train.values
+            y = Y_train_co.values
             acc, cv, _ = get_reward(x, y, args, scores_b, mode, model, metric)
             accs_mix.append(acc)
             cvs_mix.append(cv)
@@ -244,6 +245,8 @@ def trainPPO(args, dataset_path, target, covariates, mode, model, metric):
             mixed_nums = df_mixed[args.steps_num - 1].shape[1]
             logging.info(
                 f"top_mixed_cotarget_acc:{best_mixed_target.accs},cv:{best_mixed_target.cvs[-1]},feature_nums:{mixed_nums / feature_nums, mixed_nums, feature_nums}")
+            # logging.info(
+            #     f"top_mixed_feature_indices:{best_mixed_target.indices},feature_importances:{best_mixed_target.feature_importances}")
         except:
             pass
 

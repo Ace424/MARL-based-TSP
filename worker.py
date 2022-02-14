@@ -15,3 +15,6 @@ class Worker(object):
         self.features = None
         self.ff = None
         self.steps = None
+
+        self.feature_importances = None
+        self.indices = None

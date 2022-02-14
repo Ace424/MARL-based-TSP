@@ -3,6 +3,8 @@ Created on 2021.4.9 10:32
 @author: zly
 """
 import numpy as np
+import pandas as pd
+
 from feature_engineering.memory_no_encode import Memory
 from feature_engineering.utils_memory import ff, sort_count, calculate_chi2, categories_to_int
 from collections import Counter
@@ -236,19 +238,48 @@ def divide(col1, col2):
         raise ValueError('Value type error,check feature type')
 
 
+### New actions
 # diff action的执行
 def diff(col1, col2, delta):
     '''
-        :type col1,col2: list or np.array
-        :rtype: np.array,shape = (len(array),2)
-        '''
-    # 数值特征减法，不指定被减数的话，生成的应该是两列特征
+    :type col1,col2: list or np.array
+    :rtype: np.array,shape = (len(array),2)
+    '''
+    # 一阶差分
     try:
         col1 = np.array(col1)
         col2 = np.array(col2)
         return ((col1 - col2) / delta).reshape(-1, 1)
     except:
         raise ValueError('Value type error,check feature type')
+
+
+def window(cols):
+    # try:
+        new_cols = []
+        cols = pd.DataFrame(cols)
+        new_cols.append(np.array(cols.mean(axis=1).values).reshape(-1, 1))
+        new_cols.append(np.array(cols.median(axis=1).values).reshape(-1, 1))
+        new_cols.append(np.array(cols.std(axis=1).values).reshape(-1, 1))
+        new_cols.append(np.array(cols.min(axis=1).values).reshape(-1, 1))
+        new_cols.append(np.array(cols.max(axis=1).values).reshape(-1, 1))
+        return new_cols
+    # except:
+    #     raise ValueError('Value type error,check feature type')
+
+
+def period(cols):
+    # try:
+        new_cols = []
+        cols = pd.DataFrame(cols)
+        new_cols.append(np.array(cols.mean(axis=1).values).reshape(-1, 1))
+        new_cols.append(np.array(cols.median(axis=1).values).reshape(-1, 1))
+        new_cols.append(np.array(cols.std(axis=1).values).reshape(-1, 1))
+        new_cols.append(np.array(cols.min(axis=1).values).reshape(-1, 1))
+        new_cols.append(np.array(cols.max(axis=1).values).reshape(-1, 1))
+        return new_cols
+    # except:
+    #     raise ValueError('Value type error,check feature type')
 
 
 def convert_2_onehot(ori_fe: np.array,

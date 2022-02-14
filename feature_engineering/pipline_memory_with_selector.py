@@ -91,19 +91,35 @@ class Pipline(object):
         for index, operation in self.value_convert.items():
             ori_col = self.ori_cols_continuous[:, index]
             if operation != 'None':
-                new_fe = globals()[operation](ori_col)
-                new_fe_index = self.ori_cols_continuous.shape[1]
-                # print(new_fe)
-                if not isinstance(new_fe, np.ndarray):
-                    continue
-                # pipeline中特征更新
-                self.ori_cols_continuous = np.hstack((self.ori_cols_continuous, new_fe))
-                new_fe = new_fe.reshape(-1)
-                fe_norm = normalization(new_fe, new_fe_index, self.memory, self.isvalid)
-                if isinstance(ori_fes, np.ndarray):
-                    ori_fes = np.hstack((ori_fes, fe_norm))
+                new_fess = []
+                if operation == 'window':
+                    ori_cols = self.ori_cols_continuous[:,
+                               index - 2:index + 1] if index > 1 else self.ori_cols_continuous[:,
+                                                                      0:index]
+                    new_fess = globals()[operation](ori_cols)
+                elif operation == 'period':
+                    ori_cols = pd.DataFrame()
+                    while index >= 0:
+                        ori_cols = pd.concat([ori_cols, pd.Series(self.ori_cols_continuous[:, index])], axis=1)
+                        index -= 11
+                    new_fess == globals()[operation](ori_cols)
                 else:
-                    ori_fes = fe_norm
+                    new_fess = [globals()[operation](ori_col)]
+                new_fe_index = self.ori_cols_continuous.shape[1]
+                # pipeline中特征更新
+                for new_fe in new_fess:
+                    # print("---------operations---------------")
+                    # print(operation)
+                    # print(new_fe)
+                    self.ori_cols_continuous = np.hstack((self.ori_cols_continuous, new_fe))
+                    new_fe = new_fe.reshape(-1)
+                    if len(new_fe) > 0:
+                        fe_norm = normalization(new_fe, new_fe_index, self.memory, self.isvalid)
+                        new_fe_index += 1
+                        if isinstance(ori_fes, np.ndarray):
+                            ori_fes = np.hstack((ori_fes, fe_norm))
+                        else:
+                            ori_fes = fe_norm
         return ori_fes
 
     def single_fe_operations2(self, ori_fes):
@@ -113,18 +129,31 @@ class Pipline(object):
             if operation != 'None':
                 new_fe_index = self.ori_cols_continuous.shape[1]
                 if operation == "min_max":
-                    new_fe = globals()[operation](ori_col, new_fe_index, self.memory, self.isvalid)
+                    new_fes = globals()[operation](ori_col, new_fe_index, self.memory, self.isvalid)
+                elif operation == 'window':
+                    ori_cols = self.ori_cols_continuous[:,
+                               index - 2:index + 1] if index > 1 else self.ori_cols_continuous[:,
+                                                                      0:index]
+                    new_fes = globals()[operation](ori_cols)
+                elif operation == 'period':
+                    ori_cols = pd.DataFrame()
+                    while index >= 0:
+                        ori_cols = pd.concat([ori_cols, self.ori_cols_continuous[:, index]], axis=1)
+                        index -= 11
+                    new_fes == globals()[operation](ori_cols)
                 else:
-                    new_fe = globals()[operation](ori_col)
+                    new_fes = globals()[operation](ori_col)
                 # pipeline中特征更新
-                self.ori_cols_continuous = np.hstack((self.ori_cols_continuous, new_fe))
-                new_fe = new_fe.reshape(-1)
-                if len(new_fe) > 0:
-                    fe_norm = normalization(new_fe, new_fe_index, self.memory, self.isvalid)
-                    if isinstance(ori_fes, np.ndarray):
-                        ori_fes = np.hstack((ori_fes, fe_norm))
-                    else:
-                        ori_fes = fe_norm
+                for new_fe in new_fes:
+                    self.ori_cols_continuous = np.hstack((self.ori_cols_continuous, new_fe))
+                    new_fe = new_fe.reshape(-1)
+                    if len(new_fe) > 0:
+                        fe_norm = normalization(new_fe, new_fe_index, self.memory, self.isvalid)
+                        new_fe_index += 1
+                        if isinstance(ori_fes, np.ndarray):
+                            ori_fes = np.hstack((ori_fes, fe_norm))
+                        else:
+                            ori_fes = fe_norm
         return ori_fes
 
     def arithmetic_operations(self, ori_fes):
@@ -140,22 +169,14 @@ class Pipline(object):
             operation = operations[i]
             for col_index_tuple in combine_feature_tuples_list:
                 col1_index, col2_index = col_index_tuple
-                # debugging
-                # if col1_index == 22 or col2_index == 22:
-                #     if self.ori_cols_continuous.shape[1] == 22:
-                #         print("ori_c_cols:" + str(self.ori_cols_continuous.shape))
-                #         print(self.ori_cols_continuous)
-                #         print("col1_index:" + str(col1_index) + ", col2_index:" + str(col2_index))
-                #         print("dataframe:")
-                #         print(self.ori_dataframe)
                 col1 = self.ori_cols_continuous[:, col1_index]
                 col2 = self.ori_cols_continuous[:, col2_index]
                 if operation != 'None':
                     # diff action的操作
-                    if operation != 'diff':
-                        new_fe = globals()[operation](col1, col2)
-                    else:
+                    if operation == 'diff':
                         new_fe = globals()[operation](col1, col2, abs(col1_index - col2_index))
+                    else:
+                        new_fe = globals()[operation](col1, col2)
                     ori_len = self.ori_cols_continuous.shape[1]
                     if not isinstance(new_fe, np.ndarray):
                         continue
