@@ -45,7 +45,7 @@ if __name__ == '__main__':
     parser_ppo.add_argument("--target", type=str, default=None)
     parser_ppo.add_argument("--train_size", type=float, default=0.8)
     # ppo
-    parser_ppo.add_argument("--epochs", type=int, default=50)
+    parser_ppo.add_argument("--epochs", type=int, default=20)
     parser_ppo.add_argument("--ppo_epochs", type=int, default=5)
     parser_ppo.add_argument("--episodes", type=int, default=24)
     parser_ppo.add_argument("--lr", type=float, default=1e-3)
